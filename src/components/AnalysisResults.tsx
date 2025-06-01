@@ -1,4 +1,4 @@
-// components/AnalysisResults.tsx (Complete version)
+// components/AnalysisResults.tsx (Updated to match backend structure)
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -34,6 +34,53 @@ interface AnalysisResultsProps {
     onComplete: () => void;
 }
 
+// Updated interfaces to match backend structure
+interface CategoryScore {
+    score: number;
+    issues: number;
+    criticalIssues: number;
+    suggestions: string[];
+    details: string[];
+}
+
+interface FileAnalysis {
+    filePath: string;
+    score: number;
+    issues: Array<{
+        line?: number;
+        type: 'security' | 'performance' | 'quality' | 'style' | 'bug';
+        severity: 'low' | 'medium' | 'high' | 'critical';
+        message: string;
+        suggestion: string;
+    }>;
+    suggestions: string[];
+    complexity: 'low' | 'medium' | 'high';
+    maintainability: number;
+}
+
+interface FinalReport {
+    overview: {
+        totalFiles: number;
+        linesOfCode: number;
+        overallScore: number;
+        riskLevel: 'low' | 'medium' | 'high' | 'critical';
+        repositoryName: string;
+    };
+    categories: {
+        codeQuality: CategoryScore;
+        security: CategoryScore;
+        performance: CategoryScore;
+        maintainability: CategoryScore;
+    };
+    fileAnalysis: FileAnalysis[];
+    recommendations: {
+        immediate: string[];
+        shortTerm: string[];
+        longTerm: string[];
+    };
+    summary: string;
+}
+
 interface AnalysisData {
     id: string;
     status: 'processing' | 'completed' | 'failed';
@@ -42,37 +89,7 @@ interface AnalysisData {
     repositoryUrl: string;
     repositoryName?: string;
     error?: string;
-    results?: {
-        summary: {
-            overallScore: number;
-            securityScore: number;
-            qualityScore: number;
-            performanceScore: number;
-            maintainabilityScore: number;
-            totalFiles: number;
-            linesOfCode: number;
-            languages: string[];
-            analysisTime: number;
-        };
-        issues: {
-            id: string;
-            type: 'security' | 'quality' | 'performance' | 'maintainability';
-            severity: 'low' | 'medium' | 'high' | 'critical';
-            title: string;
-            description: string;
-            file: string;
-            line?: number;
-            suggestion: string;
-        }[];
-        fileAnalysis: {
-            file: string;
-            score: number;
-            issues: number;
-            suggestions: string[];
-            complexity: 'low' | 'medium' | 'high';
-        }[];
-        recommendations: string[];
-    };
+    results?: FinalReport;
     createdAt: string;
     completedAt?: string;
 }
@@ -97,7 +114,7 @@ export function AnalysisResults({ analysisId, onNewAnalysis, onComplete }: Analy
 
     const fetchAnalysisData = async () => {
         try {
-            const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/analyze/${analysisId}`);
+            const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000'}/api/analyze/${analysisId}`);
             const data = await response.json();
 
             if (!response.ok) {
@@ -277,12 +294,21 @@ export function AnalysisResults({ analysisId, onNewAnalysis, onComplete }: Analy
     const getTypeIcon = (type: string) => {
         switch (type) {
             case 'security': return <Shield className="h-4 w-4" />;
-            case 'quality': return <Code className="h-4 w-4" />;
+            case 'quality': 
+            case 'bug':
+                return <Code className="h-4 w-4" />;
             case 'performance': return <Zap className="h-4 w-4" />;
-            case 'maintainability': return <Settings className="h-4 w-4" />;
+            case 'maintainability':
+            case 'style': 
+                return <Settings className="h-4 w-4" />;
             default: return <FileText className="h-4 w-4" />;
         }
     };
+
+    // Calculate analysis time (fallback if not provided)
+    const analysisTime = analysisData.completedAt && analysisData.createdAt 
+        ? Math.floor((new Date(analysisData.completedAt).getTime() - new Date(analysisData.createdAt).getTime()) / 1000)
+        : 0;
 
     const formatDuration = (seconds: number) => {
         if (seconds < 60) return `${seconds}s`;
@@ -290,6 +316,41 @@ export function AnalysisResults({ analysisId, onNewAnalysis, onComplete }: Analy
         const remainingSeconds = seconds % 60;
         return `${minutes}m ${remainingSeconds}s`;
     };
+
+    // Collect all issues from file analysis
+    const allIssues = results.fileAnalysis.flatMap((file, fileIndex) => 
+        file.issues.map((issue, issueIndex) => ({
+            id: `${fileIndex}-${issueIndex}`,
+            ...issue,
+            file: file.filePath
+        }))
+    );
+
+    // Get unique languages from file extensions
+    const languages = [...new Set(results.fileAnalysis.map(file => {
+        const ext = file.filePath.split('.').pop()?.toLowerCase();
+        const langMap: Record<string, string> = {
+            'js': 'JavaScript',
+            'jsx': 'React',
+            'ts': 'TypeScript', 
+            'tsx': 'React TypeScript',
+            'py': 'Python',
+            'java': 'Java',
+            'cpp': 'C++',
+            'c': 'C',
+            'go': 'Go',
+            'rs': 'Rust',
+            'php': 'PHP',
+            'rb': 'Ruby',
+            'swift': 'Swift',
+            'kt': 'Kotlin',
+            'cs': 'C#',
+            'html': 'HTML',
+            'css': 'CSS',
+            'scss': 'SCSS'
+        };
+        return langMap[ext || ''] || ext?.toUpperCase() || 'Unknown';
+    }))];
 
     return (
         <div className="max-w-6xl mx-auto space-y-6">
@@ -307,7 +368,7 @@ export function AnalysisResults({ analysisId, onNewAnalysis, onComplete }: Analy
                                 <span className="text-xs text-gray-500">•</span>
                                 <span className="text-xs text-gray-500">
                                     <Clock className="h-3 w-3 inline mr-1" />
-                                    {formatDuration(results.summary.analysisTime)}
+                                    {formatDuration(analysisTime)}
                                 </span>
                             </CardDescription>
                         </div>
@@ -316,7 +377,7 @@ export function AnalysisResults({ analysisId, onNewAnalysis, onComplete }: Analy
                                 <Download className="h-4 w-4 mr-2" />
                                 Export
                             </Button>
-                            <Button variant="outline" size="sm">
+                            <Button variant="outline" size="sm" onClick={() => window.open(analysisData.repositoryUrl, '_blank')}>
                                 <ExternalLink className="h-4 w-4 mr-2" />
                                 View Repo
                             </Button>
@@ -334,8 +395,8 @@ export function AnalysisResults({ analysisId, onNewAnalysis, onComplete }: Analy
                 <Card>
                     <CardContent className="pt-6">
                         <div className="text-center">
-                            <div className={`text-3xl font-bold ${getScoreColor(results.summary.overallScore)}`}>
-                                {results.summary.overallScore}
+                            <div className={`text-3xl font-bold ${getScoreColor(results.overview.overallScore)}`}>
+                                {results.overview.overallScore}
                             </div>
                             <p className="text-sm text-gray-600 mt-1">Overall Score</p>
                         </div>
@@ -345,7 +406,7 @@ export function AnalysisResults({ analysisId, onNewAnalysis, onComplete }: Analy
                 <Card>
                     <CardContent className="pt-6">
                         <div className="text-center">
-                            <div className="text-2xl font-bold text-gray-900">{results.summary.totalFiles}</div>
+                            <div className="text-2xl font-bold text-gray-900">{results.overview.totalFiles}</div>
                             <p className="text-sm text-gray-600 mt-1">Files Analyzed</p>
                         </div>
                     </CardContent>
@@ -355,7 +416,7 @@ export function AnalysisResults({ analysisId, onNewAnalysis, onComplete }: Analy
                     <CardContent className="pt-6">
                         <div className="text-center">
                             <div className="text-2xl font-bold text-gray-900">
-                                {results.summary.linesOfCode.toLocaleString()}
+                                {results.overview.linesOfCode.toLocaleString()}
                             </div>
                             <p className="text-sm text-gray-600 mt-1">Lines of Code</p>
                         </div>
@@ -365,7 +426,7 @@ export function AnalysisResults({ analysisId, onNewAnalysis, onComplete }: Analy
                 <Card>
                     <CardContent className="pt-6">
                         <div className="text-center">
-                            <div className="text-2xl font-bold text-gray-900">{results.issues.length}</div>
+                            <div className="text-2xl font-bold text-gray-900">{allIssues.length}</div>
                             <p className="text-sm text-gray-600 mt-1">Issues Found</p>
                         </div>
                     </CardContent>
@@ -398,24 +459,30 @@ export function AnalysisResults({ analysisId, onNewAnalysis, onComplete }: Analy
                                             <Shield className="h-4 w-4 text-blue-600" />
                                             <span className="text-sm font-medium">Security</span>
                                         </div>
-                                        <span className={`font-bold ${getScoreColor(results.summary.securityScore)}`}>
-                                            {results.summary.securityScore}
+                                        <span className={`font-bold ${getScoreColor(results.categories.security.score)}`}>
+                                            {results.categories.security.score}
                                         </span>
                                     </div>
-                                    <Progress value={results.summary.securityScore} className="h-2" />
+                                    <Progress value={results.categories.security.score} className="h-2" />
+                                    <p className="text-xs text-gray-600">
+                                        {results.categories.security.issues} issues, {results.categories.security.criticalIssues} critical
+                                    </p>
                                 </div>
 
                                 <div className="space-y-4">
                                     <div className="flex items-center justify-between">
                                         <div className="flex items-center gap-2">
                                             <Code className="h-4 w-4 text-green-600" />
-                                            <span className="text-sm font-medium">Quality</span>
+                                            <span className="text-sm font-medium">Code Quality</span>
                                         </div>
-                                        <span className={`font-bold ${getScoreColor(results.summary.qualityScore)}`}>
-                                            {results.summary.qualityScore}
+                                        <span className={`font-bold ${getScoreColor(results.categories.codeQuality.score)}`}>
+                                            {results.categories.codeQuality.score}
                                         </span>
                                     </div>
-                                    <Progress value={results.summary.qualityScore} className="h-2" />
+                                    <Progress value={results.categories.codeQuality.score} className="h-2" />
+                                    <p className="text-xs text-gray-600">
+                                        {results.categories.codeQuality.issues} issues, {results.categories.codeQuality.criticalIssues} critical
+                                    </p>
                                 </div>
 
                                 <div className="space-y-4">
@@ -424,11 +491,14 @@ export function AnalysisResults({ analysisId, onNewAnalysis, onComplete }: Analy
                                             <Zap className="h-4 w-4 text-yellow-600" />
                                             <span className="text-sm font-medium">Performance</span>
                                         </div>
-                                        <span className={`font-bold ${getScoreColor(results.summary.performanceScore)}`}>
-                                            {results.summary.performanceScore}
+                                        <span className={`font-bold ${getScoreColor(results.categories.performance.score)}`}>
+                                            {results.categories.performance.score}
                                         </span>
                                     </div>
-                                    <Progress value={results.summary.performanceScore} className="h-2" />
+                                    <Progress value={results.categories.performance.score} className="h-2" />
+                                    <p className="text-xs text-gray-600">
+                                        {results.categories.performance.issues} issues, {results.categories.performance.criticalIssues} critical
+                                    </p>
                                 </div>
 
                                 <div className="space-y-4">
@@ -437,11 +507,14 @@ export function AnalysisResults({ analysisId, onNewAnalysis, onComplete }: Analy
                                             <Settings className="h-4 w-4 text-purple-600" />
                                             <span className="text-sm font-medium">Maintainability</span>
                                         </div>
-                                        <span className={`font-bold ${getScoreColor(results.summary.maintainabilityScore)}`}>
-                                            {results.summary.maintainabilityScore}
+                                        <span className={`font-bold ${getScoreColor(results.categories.maintainability.score)}`}>
+                                            {results.categories.maintainability.score}
                                         </span>
                                     </div>
-                                    <Progress value={results.summary.maintainabilityScore} className="h-2" />
+                                    <Progress value={results.categories.maintainability.score} className="h-2" />
+                                    <p className="text-xs text-gray-600">
+                                        {results.categories.maintainability.issues} issues
+                                    </p>
                                 </div>
                             </div>
                         </CardContent>
@@ -454,42 +527,60 @@ export function AnalysisResults({ analysisId, onNewAnalysis, onComplete }: Analy
                         </CardHeader>
                         <CardContent>
                             <div className="flex flex-wrap gap-2">
-                                {results.summary.languages.map((lang, index) => (
+                                {languages.map((lang, index) => (
                                     <Badge key={index} variant="secondary">{lang}</Badge>
                                 ))}
                             </div>
                         </CardContent>
                     </Card>
+
+                    {/* Repository Summary */}
+                    <Card>
+                        <CardHeader>
+                            <CardTitle>Analysis Summary</CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                            <p className="text-gray-700">{results.summary}</p>
+                        </CardContent>
+                    </Card>
                 </TabsContent>
 
                 <TabsContent value="issues" className="space-y-4">
-                    {results.issues.map((issue) => (
-                        <Card key={issue.id}>
-                            <CardContent className="pt-6">
-                                <div className="flex items-start justify-between">
-                                    <div className="flex-1">
-                                        <div className="flex items-center gap-2 mb-2">
-                                            {getTypeIcon(issue.type)}
-                                            <h3 className="font-medium">{issue.title}</h3>
-                                            <Badge className={getRiskColor(issue.severity)}>
-                                                {issue.severity}
-                                            </Badge>
-                                        </div>
-                                        <p className="text-sm text-gray-600 mb-3">{issue.description}</p>
-                                        <div className="flex items-center gap-4 text-xs text-gray-500 mb-3">
-                                            <span>{issue.file}</span>
-                                            {issue.line && <span>Line {issue.line}</span>}
-                                        </div>
-                                        <div className="bg-blue-50 rounded-lg p-3">
-                                            <p className="text-sm text-blue-800">
-                                                <strong>Suggestion:</strong> {issue.suggestion}
-                                            </p>
-                                        </div>
-                                    </div>
-                                </div>
+                    {allIssues.length === 0 ? (
+                        <Card>
+                            <CardContent className="pt-6 text-center">
+                                <CheckCircle className="h-12 w-12 text-green-500 mx-auto mb-4" />
+                                <p className="text-gray-600">No issues found! Your code looks great.</p>
                             </CardContent>
                         </Card>
-                    ))}
+                    ) : (
+                        allIssues.map((issue) => (
+                            <Card key={issue.id}>
+                                <CardContent className="pt-6">
+                                    <div className="flex items-start justify-between">
+                                        <div className="flex-1">
+                                            <div className="flex items-center gap-2 mb-2">
+                                                {getTypeIcon(issue.type)}
+                                                <h3 className="font-medium">{issue.message}</h3>
+                                                <Badge className={getRiskColor(issue.severity)}>
+                                                    {issue.severity}
+                                                </Badge>
+                                            </div>
+                                            <div className="flex items-center gap-4 text-xs text-gray-500 mb-3">
+                                                <span>{issue.file}</span>
+                                                {issue.line && <span>Line {issue.line}</span>}
+                                            </div>
+                                            <div className="bg-blue-50 rounded-lg p-3">
+                                                <p className="text-sm text-blue-800">
+                                                    <strong>Suggestion:</strong> {issue.suggestion}
+                                                </p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </CardContent>
+                            </Card>
+                        ))
+                    )}
                 </TabsContent>
 
                 <TabsContent value="files" className="space-y-4">
@@ -497,7 +588,7 @@ export function AnalysisResults({ analysisId, onNewAnalysis, onComplete }: Analy
                         <Card key={index}>
                             <CardContent className="pt-6">
                                 <div className="flex items-center justify-between mb-3">
-                                    <h3 className="font-medium">{file.file}</h3>
+                                    <h3 className="font-medium">{file.filePath}</h3>
                                     <div className="flex items-center gap-2">
                                         <Badge variant={file.complexity === 'high' ? 'destructive' : file.complexity === 'medium' ? 'secondary' : 'outline'}>
                                             {file.complexity} complexity
@@ -508,7 +599,7 @@ export function AnalysisResults({ analysisId, onNewAnalysis, onComplete }: Analy
                                     </div>
                                 </div>
                                 <p className="text-sm text-gray-600 mb-3">
-                                    {file.issues} issues found
+                                    {file.issues.length} issues found • Maintainability: {file.maintainability}/100
                                 </p>
                                 <div className="space-y-2">
                                     {file.suggestions.map((suggestion, idx) => (
@@ -523,17 +614,61 @@ export function AnalysisResults({ analysisId, onNewAnalysis, onComplete }: Analy
                 </TabsContent>
 
                 <TabsContent value="recommendations" className="space-y-4">
+                    {results.recommendations.immediate.length > 0 && (
+                        <Card>
+                            <CardHeader>
+                                <CardTitle className="text-red-600">🚨 Immediate Actions</CardTitle>
+                                <CardDescription>
+                                    Critical issues that should be addressed right away
+                                </CardDescription>
+                            </CardHeader>
+                            <CardContent>
+                                <div className="space-y-3">
+                                    {results.recommendations.immediate.map((recommendation, index) => (
+                                        <div key={index} className="flex items-start gap-3 p-4 bg-red-50 rounded-lg border border-red-200">
+                                            <div className="w-6 h-6 bg-red-600 text-white rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0">
+                                                {index + 1}
+                                            </div>
+                                            <p className="text-sm text-red-900">{recommendation}</p>
+                                        </div>
+                                    ))}
+                                </div>
+                            </CardContent>
+                        </Card>
+                    )}
+
                     <Card>
                         <CardHeader>
-                            <CardTitle>Key Recommendations</CardTitle>
+                            <CardTitle className="text-yellow-600">📋 Short-term Improvements</CardTitle>
                             <CardDescription>
-                                Priority improvements to enhance your codebase
+                                Important improvements to implement in the coming weeks
                             </CardDescription>
                         </CardHeader>
                         <CardContent>
-                            <div className="space-y-4">
-                                {results.recommendations.map((recommendation, index) => (
-                                    <div key={index} className="flex items-start gap-3 p-4 bg-blue-50 rounded-lg">
+                            <div className="space-y-3">
+                                {results.recommendations.shortTerm.map((recommendation, index) => (
+                                    <div key={index} className="flex items-start gap-3 p-4 bg-yellow-50 rounded-lg border border-yellow-200">
+                                        <div className="w-6 h-6 bg-yellow-600 text-white rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0">
+                                            {index + 1}
+                                        </div>
+                                        <p className="text-sm text-yellow-900">{recommendation}</p>
+                                    </div>
+                                ))}
+                            </div>
+                        </CardContent>
+                    </Card>
+
+                    <Card>
+                        <CardHeader>
+                            <CardTitle className="text-blue-600">🎯 Long-term Goals</CardTitle>
+                            <CardDescription>
+                                Strategic improvements for future development
+                            </CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                            <div className="space-y-3">
+                                {results.recommendations.longTerm.map((recommendation, index) => (
+                                    <div key={index} className="flex items-start gap-3 p-4 bg-blue-50 rounded-lg border border-blue-200">
                                         <div className="w-6 h-6 bg-blue-600 text-white rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0">
                                             {index + 1}
                                         </div>

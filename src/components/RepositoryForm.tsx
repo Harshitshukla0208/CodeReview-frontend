@@ -39,7 +39,7 @@ export function RepositoryForm({ onAnalysisStart }: RepositoryFormProps) {
         setIsLoading(true);
 
         try {
-            const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/analyze`, {
+            const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000'}/api/analyze`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
