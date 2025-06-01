@@ -28,10 +28,56 @@ import {
     Minus
 } from 'lucide-react';
 
+
 interface AnalysisResultsProps {
     analysisId: string;
     onNewAnalysis: () => void;
     onComplete: () => void;
+}
+
+interface GitHubIssuesAnalysis {
+    totalIssues: number;
+    openIssues: number;
+    closedIssues: number;
+    categorySummary: {
+        bugs: number;
+        features: number;
+        enhancements: number;
+        documentation: number;
+        questions: number;
+        other: number;
+    };
+    prioritySummary: {
+        critical: number;
+        high: number;
+        medium: number;
+        low: number;
+    };
+    effortSummary: {
+        high: number;
+        medium: number;
+        low: number;
+    };
+    analyses: Array<{
+        issue: {
+            number: number;
+            title: string;
+            body: string;
+            state: string;
+            created_at: string;
+            updated_at: string;
+            labels: Array<{ name: string; color: string }>;
+            user: { login: string };
+        };
+        category: string;
+        priority: string;
+        estimatedEffort: string;
+        reasoning: string;
+        relatedFiles: string[];
+        suggestedActions: string[];
+    }>;
+    insights: string[];
+    error?: string;
 }
 
 // Updated interfaces to match backend structure
@@ -79,7 +125,9 @@ interface FinalReport {
         longTerm: string[];
     };
     summary: string;
+    githubIssues?: GitHubIssuesAnalysis; // Add this line
 }
+
 
 interface AnalysisData {
     id: string;
@@ -211,6 +259,7 @@ export function AnalysisResults({ analysisId, onNewAnalysis, onComplete }: Analy
                             <li>• Running AI analysis on each file</li>
                             <li>• Generating comprehensive report</li>
                         </ul>
+                        
                     </div>
 
                     <div className="text-center">
@@ -294,19 +343,19 @@ export function AnalysisResults({ analysisId, onNewAnalysis, onComplete }: Analy
     const getTypeIcon = (type: string) => {
         switch (type) {
             case 'security': return <Shield className="h-4 w-4" />;
-            case 'quality': 
+            case 'quality':
             case 'bug':
                 return <Code className="h-4 w-4" />;
             case 'performance': return <Zap className="h-4 w-4" />;
             case 'maintainability':
-            case 'style': 
+            case 'style':
                 return <Settings className="h-4 w-4" />;
             default: return <FileText className="h-4 w-4" />;
         }
     };
 
     // Calculate analysis time (fallback if not provided)
-    const analysisTime = analysisData.completedAt && analysisData.createdAt 
+    const analysisTime = analysisData.completedAt && analysisData.createdAt
         ? Math.floor((new Date(analysisData.completedAt).getTime() - new Date(analysisData.createdAt).getTime()) / 1000)
         : 0;
 
@@ -318,7 +367,7 @@ export function AnalysisResults({ analysisId, onNewAnalysis, onComplete }: Analy
     };
 
     // Collect all issues from file analysis
-    const allIssues = results.fileAnalysis.flatMap((file, fileIndex) => 
+    const allIssues = results.fileAnalysis.flatMap((file, fileIndex) =>
         file.issues.map((issue, issueIndex) => ({
             id: `${fileIndex}-${issueIndex}`,
             ...issue,
@@ -332,7 +381,7 @@ export function AnalysisResults({ analysisId, onNewAnalysis, onComplete }: Analy
         const langMap: Record<string, string> = {
             'js': 'JavaScript',
             'jsx': 'React',
-            'ts': 'TypeScript', 
+            'ts': 'TypeScript',
             'tsx': 'React TypeScript',
             'py': 'Python',
             'java': 'Java',
@@ -391,8 +440,7 @@ export function AnalysisResults({ analysisId, onNewAnalysis, onComplete }: Analy
             </Card>
 
             {/* Summary Cards */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <Card>
+<div className={`grid grid-cols-2 md:grid-cols-${results.githubIssues && !results.githubIssues.error ? '5' : '4'} gap-4`}>                <Card>
                     <CardContent className="pt-6">
                         <div className="text-center">
                             <div className={`text-3xl font-bold ${getScoreColor(results.overview.overallScore)}`}>
@@ -431,13 +479,24 @@ export function AnalysisResults({ analysisId, onNewAnalysis, onComplete }: Analy
                         </div>
                     </CardContent>
                 </Card>
+{results.githubIssues && !results.githubIssues.error && (
+    <Card>
+        <CardContent className="pt-6">
+            <div className="text-center">
+                <div className="text-2xl font-bold text-purple-600">{results.githubIssues.totalIssues}</div>
+                <p className="text-sm text-gray-600 mt-1">GitHub Issues</p>
+            </div>
+        </CardContent>
+    </Card>
+)}
             </div>
 
             {/* Detailed Results */}
             <Tabs defaultValue="overview" className="space-y-6">
-                <TabsList className="grid w-full grid-cols-4">
+                <TabsList className="grid w-full grid-cols-5">
                     <TabsTrigger value="overview">Overview</TabsTrigger>
-                    <TabsTrigger value="issues">Issues</TabsTrigger>
+                    <TabsTrigger value="issues">Code Issues</TabsTrigger>
+                    <TabsTrigger value="github-issues">GitHub Issues</TabsTrigger>
                     <TabsTrigger value="files">Files</TabsTrigger>
                     <TabsTrigger value="recommendations">Recommendations</TabsTrigger>
                 </TabsList>
@@ -678,6 +737,197 @@ export function AnalysisResults({ analysisId, onNewAnalysis, onComplete }: Analy
                             </div>
                         </CardContent>
                     </Card>
+                </TabsContent>
+
+                <TabsContent value="github-issues" className="space-y-6">
+                    {!results.githubIssues ? (
+                        <Card>
+                            <CardContent className="pt-6 text-center">
+                                <p className="text-gray-600">GitHub Issues analysis not available for this repository.</p>
+                            </CardContent>
+                        </Card>
+                    ) : results.githubIssues.error ? (
+                        <Card>
+                            <CardContent className="pt-6">
+                                <Alert variant="destructive">
+                                    <AlertTriangle className="h-4 w-4" />
+                                    <AlertDescription>
+                                        GitHub Issues Analysis Error: {results.githubIssues.error}
+                                    </AlertDescription>
+                                </Alert>
+                            </CardContent>
+                        </Card>
+                    ) : (
+                        <>
+                            {/* GitHub Issues Summary */}
+                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                                <Card>
+                                    <CardContent className="pt-6 text-center">
+                                        <div className="text-2xl font-bold text-blue-600">{results.githubIssues.totalIssues}</div>
+                                        <p className="text-sm text-gray-600">Total Issues</p>
+                                    </CardContent>
+                                </Card>
+                                <Card>
+                                    <CardContent className="pt-6 text-center">
+                                        <div className="text-2xl font-bold text-green-600">{results.githubIssues.openIssues}</div>
+                                        <p className="text-sm text-gray-600">Open Issues</p>
+                                    </CardContent>
+                                </Card>
+                                <Card>
+                                    <CardContent className="pt-6 text-center">
+                                        <div className="text-2xl font-bold text-gray-600">{results.githubIssues.closedIssues}</div>
+                                        <p className="text-sm text-gray-600">Closed Issues</p>
+                                    </CardContent>
+                                </Card>
+                                <Card>
+                                    <CardContent className="pt-6 text-center">
+                                        <div className="text-2xl font-bold text-red-600">
+                                            {results.githubIssues.prioritySummary.critical + results.githubIssues.prioritySummary.high}
+                                        </div>
+                                        <p className="text-sm text-gray-600">High Priority</p>
+                                    </CardContent>
+                                </Card>
+                            </div>
+
+                            {/* Category Breakdown */}
+                            <Card>
+                                <CardHeader>
+                                    <CardTitle>Issue Categories</CardTitle>
+                                </CardHeader>
+                                <CardContent>
+                                    <div className="grid grid-cols-3 gap-4">
+                                        <div className="text-center">
+                                            <div className="text-xl font-bold text-red-600">{results.githubIssues.categorySummary.bugs}</div>
+                                            <p className="text-sm text-gray-600">Bugs</p>
+                                        </div>
+                                        <div className="text-center">
+                                            <div className="text-xl font-bold text-blue-600">{results.githubIssues.categorySummary.features}</div>
+                                            <p className="text-sm text-gray-600">Features</p>
+                                        </div>
+                                        <div className="text-center">
+                                            <div className="text-xl font-bold text-green-600">{results.githubIssues.categorySummary.enhancements}</div>
+                                            <p className="text-sm text-gray-600">Enhancements</p>
+                                        </div>
+                                        <div className="text-center">
+                                            <div className="text-xl font-bold text-purple-600">{results.githubIssues.categorySummary.documentation}</div>
+                                            <p className="text-sm text-gray-600">Documentation</p>
+                                        </div>
+                                        <div className="text-center">
+                                            <div className="text-xl font-bold text-yellow-600">{results.githubIssues.categorySummary.questions}</div>
+                                            <p className="text-sm text-gray-600">Questions</p>
+                                        </div>
+                                        <div className="text-center">
+                                            <div className="text-xl font-bold text-gray-600">{results.githubIssues.categorySummary.other}</div>
+                                            <p className="text-sm text-gray-600">Other</p>
+                                        </div>
+                                    </div>
+                                </CardContent>
+                            </Card>
+
+                            {/* Insights */}
+                            {results.githubIssues.insights.length > 0 && (
+                                <Card>
+                                    <CardHeader>
+                                        <CardTitle>Key Insights</CardTitle>
+                                    </CardHeader>
+                                    <CardContent>
+                                        <div className="space-y-2">
+                                            {results.githubIssues.insights.map((insight, index) => (
+                                                <div key={index} className="flex items-start gap-2 p-3 bg-blue-50 rounded-lg">
+                                                    <div className="w-6 h-6 bg-blue-600 text-white rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0">
+                                                        {index + 1}
+                                                    </div>
+                                                    <p className="text-sm text-blue-900">{insight}</p>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </CardContent>
+                                </Card>
+                            )}
+
+                            {/* Issue Details */}
+                            <Card>
+                                <CardHeader>
+                                    <CardTitle>Issue Analysis</CardTitle>
+                                    <CardDescription>
+                                        Detailed analysis of individual GitHub issues
+                                    </CardDescription>
+                                </CardHeader>
+                                <CardContent className="space-y-4">
+                                    {results.githubIssues.analyses.slice(0, 10).map((analysis, index) => (
+                                        <div key={index} className="border rounded-lg p-4 space-y-3">
+                                            <div className="flex items-start justify-between">
+                                                <div className="flex-1">
+                                                    <h4 className="font-medium">
+                                                        #{analysis.issue.number}: {analysis.issue.title}
+                                                    </h4>
+                                                    <div className="flex items-center gap-2 mt-1">
+                                                        <Badge variant={analysis.issue.state === 'open' ? 'default' : 'secondary'}>
+                                                            {analysis.issue.state}
+                                                        </Badge>
+                                                        <Badge className={
+                                                            analysis.category === 'bug' ? 'bg-red-100 text-red-800' :
+                                                                analysis.category === 'feature' ? 'bg-blue-100 text-blue-800' :
+                                                                    analysis.category === 'enhancement' ? 'bg-green-100 text-green-800' :
+                                                                        'bg-gray-100 text-gray-800'
+                                                        }>
+                                                            {analysis.category}
+                                                        </Badge>
+                                                        <Badge className={
+                                                            analysis.priority === 'critical' ? 'bg-red-100 text-red-800' :
+                                                                analysis.priority === 'high' ? 'bg-orange-100 text-orange-800' :
+                                                                    analysis.priority === 'medium' ? 'bg-yellow-100 text-yellow-800' :
+                                                                        'bg-green-100 text-green-800'
+                                                        }>
+                                                            {analysis.priority} priority
+                                                        </Badge>
+                                                        <Badge variant="outline">
+                                                            {analysis.estimatedEffort} effort
+                                                        </Badge>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <p className="text-sm text-gray-600">{analysis.reasoning}</p>
+                                            {analysis.relatedFiles.length > 0 && (
+                                                <div>
+                                                    <p className="text-xs font-medium text-gray-700 mb-1">Related Files:</p>
+                                                    <div className="flex flex-wrap gap-1">
+                                                        {analysis.relatedFiles.slice(0, 3).map((file, idx) => (
+                                                            <Badge key={idx} variant="outline" className="text-xs">
+                                                                {file}
+                                                            </Badge>
+                                                        ))}
+                                                        {analysis.relatedFiles.length > 3 && (
+                                                            <Badge variant="outline" className="text-xs">
+                                                                +{analysis.relatedFiles.length - 3} more
+                                                            </Badge>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            )}
+                                            {analysis.suggestedActions.length > 0 && (
+                                                <div className="bg-green-50 rounded-lg p-3">
+                                                    <p className="text-xs font-medium text-green-800 mb-1">Suggested Actions:</p>
+                                                    <ul className="text-xs text-green-700 space-y-1">
+                                                        {analysis.suggestedActions.map((action, idx) => (
+                                                            <li key={idx}>• {action}</li>
+                                                        ))}
+                                                    </ul>
+                                                </div>
+                                            )}
+                                        </div>
+                                    ))}
+                                    {results.githubIssues.analyses.length > 10 && (
+                                        <div className="text-center">
+                                            <p className="text-sm text-gray-600">
+                                                Showing 10 of {results.githubIssues.analyses.length} issues
+                                            </p>
+                                        </div>
+                                    )}
+                                </CardContent>
+                            </Card>
+                        </>
+                    )}
                 </TabsContent>
             </Tabs>
         </div>

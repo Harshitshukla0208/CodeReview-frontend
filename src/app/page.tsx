@@ -3,8 +3,6 @@
 import { useState } from 'react';
 import { RepositoryForm } from '@/components/RepositoryForm';
 import { AnalysisResults } from '@/components/AnalysisResults';
-// import { Header } from '@/components/Header';
-// import { Footer } from '@/components/Footer';
 
 export default function HomePage() {
   const [analysisId, setAnalysisId] = useState<string | null>(null);
@@ -26,8 +24,6 @@ export default function HomePage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50">
-      {/* <Header /> */}
-
       <main className="container mx-auto px-4 py-8">
         {!analysisId ? (
           <div className="max-w-4xl mx-auto">
@@ -108,8 +104,6 @@ export default function HomePage() {
           />
         )}
       </main>
-
-      {/* <Footer /> */}
     </div>
   );
 }

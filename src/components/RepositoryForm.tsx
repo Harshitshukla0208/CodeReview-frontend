@@ -5,7 +5,9 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Loader2, Github, GitBranch } from 'lucide-react';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Label } from '@/components/ui/label';
+import { Loader2, Github, GitBranch, Eye, EyeOff } from 'lucide-react';
 
 interface RepositoryFormProps {
     onAnalysisStart: (analysisId: string) => void;
@@ -13,6 +15,9 @@ interface RepositoryFormProps {
 
 export function RepositoryForm({ onAnalysisStart }: RepositoryFormProps) {
     const [repositoryUrl, setRepositoryUrl] = useState('');
+    const [includeGitHubIssues, setIncludeGitHubIssues] = useState(true);
+    const [githubToken, setGithubToken] = useState('');
+    const [showToken, setShowToken] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState('');
 
@@ -20,6 +25,10 @@ export function RepositoryForm({ onAnalysisStart }: RepositoryFormProps) {
         const githubPattern = /^https:\/\/github\.com\/[\w\-\.]+\/[\w\-\.]+\/?$/;
         const gitlabPattern = /^https:\/\/gitlab\.com\/[\w\-\.]+\/[\w\-\.]+\/?$/;
         return githubPattern.test(url.trim()) || gitlabPattern.test(url.trim());
+    };
+
+    const isGitHubUrl = (url: string): boolean => {
+        return url.includes('github.com');
     };
 
     const handleSubmit = async (e: React.FormEvent) => {
@@ -36,17 +45,30 @@ export function RepositoryForm({ onAnalysisStart }: RepositoryFormProps) {
             return;
         }
 
+        if (includeGitHubIssues && !isGitHubUrl(repositoryUrl)) {
+            setError('GitHub issues analysis is only available for GitHub repositories');
+            return;
+        }
+
         setIsLoading(true);
 
         try {
+            const requestBody: any = {
+                repositoryUrl: repositoryUrl.trim(),
+                includeGitHubIssues: includeGitHubIssues && isGitHubUrl(repositoryUrl)
+            };
+
+            // Only include GitHub token if provided and issues analysis is enabled
+            if (includeGitHubIssues && isGitHubUrl(repositoryUrl) && githubToken.trim()) {
+                requestBody.githubToken = githubToken.trim();
+            }
+
             const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000'}/api/analyze`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                 },
-                body: JSON.stringify({
-                    repositoryUrl: repositoryUrl.trim()
-                }),
+                body: JSON.stringify(requestBody),
             });
 
             const data = await response.json();
@@ -64,8 +86,24 @@ export function RepositoryForm({ onAnalysisStart }: RepositoryFormProps) {
     };
 
     const handleUrlChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        setRepositoryUrl(e.target.value);
+        const url = e.target.value;
+        setRepositoryUrl(url);
+        
+        // Auto-disable GitHub issues if not a GitHub URL
+        if (!isGitHubUrl(url) && includeGitHubIssues) {
+            setIncludeGitHubIssues(false);
+        }
+        
         if (error) setError(''); // Clear error when user starts typing
+    };
+
+    const handleIssuesToggle = (checked: boolean) => {
+        if (checked && !isGitHubUrl(repositoryUrl)) {
+            setError('GitHub issues analysis is only available for GitHub repositories');
+            return;
+        }
+        setIncludeGitHubIssues(checked);
+        if (error) setError('');
     };
 
     const exampleUrls = [
@@ -73,6 +111,8 @@ export function RepositoryForm({ onAnalysisStart }: RepositoryFormProps) {
         'https://github.com/microsoft/vscode',
         'https://github.com/nodejs/node'
     ];
+
+    const estimatedTime = includeGitHubIssues && isGitHubUrl(repositoryUrl) ? '3-7 minutes' : '2-5 minutes';
 
     return (
         <Card className="w-full max-w-2xl mx-auto shadow-lg border-0 bg-white/80 backdrop-blur-sm">
@@ -108,6 +148,74 @@ export function RepositoryForm({ onAnalysisStart }: RepositoryFormProps) {
                         </div>
                     </div>
 
+                    {/* GitHub Issues Analysis Toggle */}
+                    <div className="space-y-3">
+                        <div className="flex items-center space-x-2">
+                            <Checkbox
+                                id="include-issues"
+                                checked={includeGitHubIssues}
+                                onCheckedChange={handleIssuesToggle}
+                                disabled={isLoading || !isGitHubUrl(repositoryUrl)}
+                            />
+                            <Label 
+                                htmlFor="include-issues" 
+                                className={`text-sm font-medium ${!isGitHubUrl(repositoryUrl) ? 'text-gray-400' : 'text-gray-700'}`}
+                            >
+                                Analyze GitHub Issues & Pull Requests
+                            </Label>
+                        </div>
+                        
+                        {includeGitHubIssues && isGitHubUrl(repositoryUrl) && (
+                            <div className="space-y-2 pl-6 border-l-2 border-blue-200">
+                                <label htmlFor="github-token" className="text-sm font-medium text-gray-700">
+                                    GitHub Token (Optional)
+                                </label>
+                                <p className="text-xs text-gray-500 mb-2">
+                                    Provide a GitHub personal access token to avoid rate limits and access private repositories
+                                </p>
+                                <div className="relative">
+                                    <Input
+                                        id="github-token"
+                                        type={showToken ? "text" : "password"}
+                                        placeholder="ghp_xxxxxxxxxxxxxxxxxxxx"
+                                        value={githubToken}
+                                        onChange={(e) => setGithubToken(e.target.value)}
+                                        className="pr-10"
+                                        disabled={isLoading}
+                                    />
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowToken(!showToken)}
+                                        className="absolute inset-y-0 right-0 pr-3 flex items-center"
+                                        disabled={isLoading}
+                                    >
+                                        {showToken ? (
+                                            <EyeOff className="h-4 w-4 text-gray-400" />
+                                        ) : (
+                                            <Eye className="h-4 w-4 text-gray-400" />
+                                        )}
+                                    </button>
+                                </div>
+                                <p className="text-xs text-gray-500">
+                                    <a 
+                                        href="https://github.com/settings/tokens" 
+                                        target="_blank" 
+                                        rel="noopener noreferrer"
+                                        className="text-blue-600 hover:text-blue-800 underline"
+                                    >
+                                        Create a GitHub token
+                                    </a> with 'repo' scope for private repositories
+                                </p>
+                            </div>
+                        )}
+                        
+                        {!isGitHubUrl(repositoryUrl) && repositoryUrl && (
+                            <p className="text-xs text-gray-500 pl-6">
+                                GitHub issues analysis is only available for GitHub repositories
+                            </p>
+                        )}
+                    </div>
+
                     {error && (
                         <Alert variant="destructive">
                             <AlertDescription>{error}</AlertDescription>
@@ -125,7 +233,7 @@ export function RepositoryForm({ onAnalysisStart }: RepositoryFormProps) {
                                 Starting Analysis...
                             </>
                         ) : (
-                            'Analyze Repository'
+                            `Analyze Repository (${estimatedTime})`
                         )}
                     </Button>
                 </form>
@@ -156,11 +264,18 @@ export function RepositoryForm({ onAnalysisStart }: RepositoryFormProps) {
                         <li>• Performance optimization opportunities</li>
                         <li>• Maintainability and technical debt</li>
                         <li>• Detailed file-by-file recommendations</li>
+                        {includeGitHubIssues && isGitHubUrl(repositoryUrl) && (
+                            <>
+                                <li>• GitHub issues categorization and prioritization</li>
+                                <li>• Issue effort estimation and insights</li>
+                                <li>• Codebase correlation with reported issues</li>
+                            </>
+                        )}
                     </ul>
                 </div>
 
                 <div className="text-center text-xs text-gray-500">
-                    <p>Only public repositories are supported. Analysis typically takes 2-5 minutes.</p>
+                    <p>Only public repositories are supported (unless GitHub token provided). Analysis typically takes {estimatedTime}.</p>
                     <p className="mt-1">Repository size limit: 100MB</p>
                 </div>
             </CardContent>
