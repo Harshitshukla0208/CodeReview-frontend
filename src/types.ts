@@ -99,3 +99,40 @@ export interface CreatePRBody {
     filePath?: string;
     originalCode?: string;
 }
+
+// Database types
+export interface DatabaseAnalysis {
+    id: string;
+    user_id: string;
+    repository_url: string;
+    github_token?: string;
+    status: 'processing' | 'completed' | 'failed';
+    progress: number;
+    results?: FinalReport;
+    error?: string;
+    created_at: string;
+    updated_at: string;
+}
+
+export interface DatabaseGitHubRepo {
+    id: number;
+    user_id: string;
+    name: string;
+    full_name: string;
+    html_url: string;
+    description?: string;
+    private: boolean;
+    fork: boolean;
+    stargazers_count: number;
+    language?: string;
+    created_at: string;
+    updated_at: string;
+}
+
+export interface User {
+    id: string;
+    email: string;
+    github_username?: string;
+    created_at: string;
+    updated_at: string;
+}

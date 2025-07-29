@@ -2,17 +2,22 @@
 
 import React, { useState } from 'react';
 import { InformationCircleIcon } from '@heroicons/react/24/outline';
+import { useAuth } from '../contexts/AuthContext';
+import { useGitHubToken } from '../hooks/useGitHubToken';
+import { supabase } from '../lib/supabase';
+import GitHubRepoSelector from './GitHubRepoSelector';
 
 interface RepoFormProps {
     onAnalysisStart: (id: string, repoUrl: string) => void;
-    githubToken: string;
-    setGithubToken: (token: string) => void;
 }
 
-const RepoForm: React.FC<RepoFormProps> = ({ onAnalysisStart, githubToken, setGithubToken }) => {
+const RepoForm: React.FC<RepoFormProps> = ({ onAnalysisStart }) => {
+    const { user, session } = useAuth();
+    const { token: githubToken, setToken: setGithubToken, loading: tokenLoading } = useGitHubToken();
     const [repoUrl, setRepoUrl] = useState('');
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [showRepoSelector, setShowRepoSelector] = useState(false);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -20,6 +25,28 @@ const RepoForm: React.FC<RepoFormProps> = ({ onAnalysisStart, githubToken, setGi
         setError(null);
 
         try {
+            // Store analysis in Supabase
+            const { data: analysisData, error: dbError } = await supabase
+                .from('analyses')
+                .insert({
+                    user_id: user?.id,
+                    repository_url: repoUrl,
+                    github_token: githubToken || null,
+                    status: 'processing',
+                    progress: 0,
+                    created_at: new Date().toISOString(),
+                    updated_at: new Date().toISOString()
+                })
+                .select()
+                .single();
+
+            if (dbError) {
+                throw new Error(`Database error: ${dbError.message}`);
+            }
+
+            console.log(`Created analysis record in database: ${analysisData.id}`);
+
+            // Call the analysis API
             const res = await fetch('/api/analyze', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -27,25 +54,70 @@ const RepoForm: React.FC<RepoFormProps> = ({ onAnalysisStart, githubToken, setGi
                     repositoryUrl: repoUrl,
                     includeGitHubIssues: true,
                     githubToken: githubToken || undefined,
+                    analysisId: analysisData.id, // Pass the database ID
                 }),
             });
 
             const data = await res.json();
             if (res.ok && data.analysisId) {
+                console.log(`Analysis started successfully: ${data.analysisId}`);
                 onAnalysisStart(data.analysisId, repoUrl);
             } else {
+                // Update analysis status to failed
+                await supabase
+                    .from('analyses')
+                    .update({ 
+                        status: 'failed', 
+                        error: data.error || 'Failed to start analysis',
+                        updated_at: new Date().toISOString()
+                    })
+                    .eq('id', analysisData.id);
+
                 setError(data.error || 'Failed to start analysis.');
             }
         } catch (err) {
-            setError('A network error occurred. Is the server running?');
+            setError(err instanceof Error ? err.message : 'A network error occurred. Is the server running?');
         } finally {
             setLoading(false);
         }
     };
 
+    const handleRepoSelect = (selectedRepoUrl: string) => {
+        setRepoUrl(selectedRepoUrl);
+        setShowRepoSelector(false);
+    };
+
+    if (tokenLoading) {
+        return (
+            <div className="bg-white shadow-lg rounded-lg p-8 max-w-2xl mx-auto text-center">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600 mx-auto mb-4"></div>
+                <p className="text-gray-600">Loading...</p>
+            </div>
+        );
+    }
+
     return (
         <div className="bg-white shadow-lg rounded-lg p-8 max-w-2xl mx-auto">
             <h2 className="text-2xl font-bold mb-6 text-center">Analyze a Repository</h2>
+            
+            {user && session?.provider_refresh_token && (
+                <div className="mb-6">
+                    <button
+                        type="button"
+                        onClick={() => setShowRepoSelector(!showRepoSelector)}
+                        className="w-full bg-gray-100 text-gray-700 px-4 py-3 rounded-md hover:bg-gray-200 transition-colors mb-4"
+                    >
+                        {showRepoSelector ? 'Hide' : 'Select from your GitHub repositories'}
+                    </button>
+                    
+                    {showRepoSelector && (
+                        <div className="border border-gray-200 rounded-lg p-4 bg-gray-50">
+                            <GitHubRepoSelector onRepoSelect={handleRepoSelect} />
+                        </div>
+                    )}
+                </div>
+            )}
+
             <form onSubmit={handleSubmit} className="flex flex-col gap-6">
                 <div>
                     <label htmlFor="repoUrl" className="block text-sm font-medium text-gray-700 mb-1">
@@ -61,9 +133,10 @@ const RepoForm: React.FC<RepoFormProps> = ({ onAnalysisStart, githubToken, setGi
                         required
                     />
                 </div>
+                
                 <div>
                     <label htmlFor="githubToken" className="block text-sm font-medium text-gray-700 mb-1">
-                        GitHub Token
+                        GitHub Token {user && session?.provider_refresh_token && '(Optional if using GitHub auth)'}
                     </label>
                     <input
                         id="githubToken"
@@ -85,6 +158,7 @@ const RepoForm: React.FC<RepoFormProps> = ({ onAnalysisStart, githubToken, setGi
                         </div>
                     </div>
                 </div>
+                
                 <button
                     type="submit"
                     className="w-full bg-indigo-600 text-white px-4 py-2 rounded-md hover:bg-indigo-700 disabled:bg-indigo-300 transition-colors"
@@ -92,6 +166,7 @@ const RepoForm: React.FC<RepoFormProps> = ({ onAnalysisStart, githubToken, setGi
                 >
                     {loading ? 'Submitting...' : 'Analyze Now'}
                 </button>
+                
                 {error && <div className="text-red-600 bg-red-50 p-3 rounded-md text-center">{error}</div>}
             </form>
         </div>
