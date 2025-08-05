@@ -57,12 +57,12 @@ export interface GitHubIssueAnalysis {
 
 export interface FinalReport {
   overview: {
-    [x: string]: string
     totalFiles: number
     linesOfCode: number
     overallScore: number
     riskLevel: "low" | "medium" | "high" | "critical"
     repositoryName: string
+    [x: string]: string | number | "low" | "medium" | "high" | "critical"
   }
   categories: {
     codeQuality: CategoryScore

@@ -10,18 +10,28 @@ import {
   FaSpinner,
   FaExclamationTriangle,
   FaClock,
-  FaEye,
   FaTrash,
 } from "react-icons/fa"
 import { useAuth } from "../contexts/AuthContext"
 import { supabase } from "../lib/supabase"
-import type { DatabaseAnalysis } from "../types"
+
+type DatabaseAnalysis = {
+  repository_url(repository_url: any): React.ReactNode
+  progress: any
+  error: any
+  id: string
+  user_id: string
+  repo_url: string
+  status: string
+  created_at: string
+  // Add other fields as needed based on your database schema
+}
 
 interface AnalysisHistoryProps {
   onAnalysisSelect: (analysisId: string, repoUrl: string) => void
 }
 
-const AnalysisHistory: React.FC<AnalysisHistoryProps> = ({ onAnalysisSelect }) => {
+const AnalysisHistory: React.FC<AnalysisHistoryProps> = () => {
   const { user } = useAuth()
   const [analyses, setAnalyses] = useState<DatabaseAnalysis[]>([])
   const [loading, setLoading] = useState(true)
@@ -94,24 +104,7 @@ const AnalysisHistory: React.FC<AnalysisHistoryProps> = ({ onAnalysisSelect }) =
     }
   }
 
-  const getRepositoryName = (url: string) => {
-    try {
-      const urlObj = new URL(url)
-      return urlObj.pathname.substring(1)
-    } catch {
-      return url
-    }
-  }
 
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString("en-US", {
-      year: "numeric",
-      month: "short",
-      day: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    })
-  }
 
   if (loading) {
     return (
@@ -173,12 +166,7 @@ const AnalysisHistory: React.FC<AnalysisHistoryProps> = ({ onAnalysisSelect }) =
                     <FaGithub className="w-4 h-4 text-gray-600" />
                   </div>
 
-                  <div className="flex-1 min-w-0">
-                    <h3 className="text-base font-semibold text-gray-900 truncate">
-                      {getRepositoryName(analysis.repository_url)}
-                    </h3>
-                    <p className="text-xs text-gray-500">{formatDate(analysis.created_at)}</p>
-                  </div>
+                  
                 </div>
 
                 <div className="flex items-center space-x-3">
@@ -201,18 +189,7 @@ const AnalysisHistory: React.FC<AnalysisHistoryProps> = ({ onAnalysisSelect }) =
                   )}
 
                   <div className="flex items-center space-x-1">
-                    {analysis.status === "completed" && (
-                      <motion.button
-                        whileHover={{ scale: 1.01 }}
-                        whileTap={{ scale: 0.99 }}
-                        transition={{ duration: 0.1 }}
-                        onClick={() => onAnalysisSelect(analysis.id, analysis.repository_url)}
-                        className="p-2 bg-indigo-100 text-indigo-600 rounded-md hover:bg-indigo-200 transition-colors duration-150"
-                        title="View Results"
-                      >
-                        <FaEye className="w-3 h-3" />
-                      </motion.button>
-                    )}
+                    
 
                     <motion.button
                       whileHover={{ scale: 1.01 }}

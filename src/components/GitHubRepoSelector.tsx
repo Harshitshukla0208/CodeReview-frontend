@@ -41,7 +41,7 @@ const GitHubRepoSelector: React.FC<GitHubRepoSelectorProps> = ({ onRepoSelect })
 
     try {
       // First, try to get repos from our database cache
-      const { data: cachedRepos, error: cacheError } = await supabase
+      const { data: cachedRepos } = await supabase
         .from('github_repos')
         .select('*')
         .eq('user_id', session?.user?.id)

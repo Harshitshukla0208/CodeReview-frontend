@@ -80,11 +80,10 @@ const CreatePRButton: React.FC<Props> = ({ githubToken, prBody }) => {
             <div className="space-y-2">
                 <button
                     onClick={handleClick}
-                    disabled={state === 'loading'}
-                    className="inline-flex items-center gap-2 px-3 py-1 text-sm font-medium text-red-700 bg-red-100 rounded-full hover:bg-red-200 disabled:opacity-50"
+                    className="inline-flex items-center gap-2 px-3 py-1 text-sm font-medium text-red-700 bg-red-100 rounded-full hover:bg-red-200"
                 >
-                    {state === 'loading' ? '🔄' : '❌'}
-                    <span>{state === 'loading' ? 'Creating...' : 'Create PR Failed'}</span>
+                    ❌
+                    <span>Create PR Failed - Retry</span>
                 </button>
                 {result && (
                     <div className="text-xs text-red-600 max-w-xs">
