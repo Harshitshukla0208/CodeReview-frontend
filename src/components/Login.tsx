@@ -1,6 +1,6 @@
 import React from 'react'
 import { useAuth } from '../contexts/AuthContext'
-import { FcGoogle } from 'react-icons/fc'
+import GoogleIcon from '../assets/search.png'
 import { FaGithub } from 'react-icons/fa'
 
 const Login: React.FC = () => {
@@ -38,10 +38,10 @@ const Login: React.FC = () => {
             onClick={handleGoogleSignIn}
             className="group relative w-full flex justify-center py-3 px-4 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-colors"
           >
-            <FcGoogle className="h-5 w-5 mr-2" />
+            <img src={GoogleIcon} alt="google icon" className="h-5 w-5 mr-2" />
             Continue with Google
           </button>
-          
+
           <button
             onClick={handleGitHubSignIn}
             className="group relative w-full flex justify-center py-3 px-4 border border-gray-300 text-sm font-medium rounded-md text-white bg-gray-900 hover:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 transition-colors"
@@ -50,7 +50,7 @@ const Login: React.FC = () => {
             Continue with GitHub
           </button>
         </div>
-        
+
         <div className="mt-6">
           <div className="relative">
             <div className="absolute inset-0 flex items-center">
@@ -74,4 +74,4 @@ const Login: React.FC = () => {
   )
 }
 
-export default Login 
+export default Login

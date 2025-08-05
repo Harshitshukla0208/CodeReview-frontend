@@ -64,4 +64,4 @@ const AuthCallback: React.FC = () => {
   )
 }
 
-export default AuthCallback 
+export default AuthCallback
