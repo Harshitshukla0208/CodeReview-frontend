@@ -4,60 +4,42 @@ import React, { useState } from 'react';
 import { api } from "../lib/api"
 
 interface Props {
-    githubToken: string;
-    owner: string;
-    repo: string;
-    filePath: string;
-    originalCode: string;
-    fixedCode: string;
-    analysisId: string;
-    onRefreshSuggestion?: () => void;
+    analysisId: string
+    githubToken: string
+    owner: string
+    repo: string
+    filePath: string
+    onRefreshSuggestion?: () => void
 }
-
-// Type for toast notifications
-interface Toast {
-    success: (message: string) => void;
-    error: (message: string) => void;
-}
-
-// Type guard for toast
-const hasToast = (window: Window): window is Window & { toast: Toast } => {
-    return 'toast' in window && typeof (window as any).toast === 'object';
-};
 
 const AutoFixButton: React.FC<Props> = ({ 
+    analysisId, 
     githubToken, 
     owner, 
     repo, 
     filePath, 
-    originalCode, 
-    fixedCode, 
-    analysisId,
     onRefreshSuggestion 
 }) => {
     const [state, setState] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
     const [result, setResult] = useState<string | null>(null);
-    const [showRefreshSuggestion, setShowRefreshSuggestion] = useState(false);
 
+    // Simple toast function
     const showToast = (type: 'success' | 'error', message: string) => {
-        if (typeof window !== 'undefined' && hasToast(window)) {
-            window.toast[type](message);
+        if (type === 'success') {
+            alert(`✅ ${message}`);
+        } else {
+            alert(`❌ ${message}`);
         }
     };
 
-    const handleClick = async () => {
+    const handleAutoFix = async () => {
         if (!githubToken) {
-            alert('A GitHub token is required to auto-fix. Please provide one on the main analysis page.');
-            return;
-        }
-        
-        if (!window.confirm('Are you sure you want to auto-fix this issue? This will commit directly to the default branch if you have write access!')) {
-            return;
+            showToast('error', 'GitHub token required for auto-fix')
+            return
         }
 
-        setState('loading');
-        setResult(null);
-        setShowRefreshSuggestion(false);
+        setState('loading')
+        setResult(null)
 
         try {
             const res = await api.autoFixPR({
@@ -65,65 +47,46 @@ const AutoFixButton: React.FC<Props> = ({
                 repository_url: `https://github.com/${owner}/${repo}.git`,
                 github_token: githubToken,
                 issues: [] // The originalCode and fixedCode are not directly passed here as per the new_code, but the API expects issues.
-            });
+            })
 
             if (!res.ok) {
-                const errorData = await res.json();
-                throw new Error(errorData.error || `HTTP error! status: ${res.status}`);
+                const errorData = await res.json()
+                throw new Error(errorData.error || `HTTP error! status: ${res.status}`)
             }
 
-            const result = await res.json();
-            setState('success');
-            const successMessage = `✅ Fix applied successfully! (${result.strategy || 'Direct commit'})`;
-            setResult(successMessage);
-            showToast('success', successMessage);
+            const result = await res.json()
+            setState('success')
+            const successMessage = `✅ Fix applied successfully! (${result.strategy || 'Direct commit'})`
+            setResult(successMessage)
+            showToast('success', successMessage)
             
             // Refresh the analysis to get updated data
-            await refreshAnalysis();
+            await refreshAnalysis()
 
         } catch (err) {
-            setState('error');
-            const errorMessage = err instanceof Error ? err.message : 'Network error during auto-fix';
-            setResult(errorMessage);
-            showToast('error', 'Network error during auto-fix');
+            setState('error')
+            const errorMessage = err instanceof Error ? err.message : 'Unknown error occurred'
+            setResult(errorMessage)
+            showToast('error', errorMessage)
         }
-    };
+    }
 
     const refreshAnalysis = async () => {
         try {
-            const response = await api.refreshAnalysis(analysisId);
+            const response = await api.refreshAnalysis(analysisId)
             
             if (!response.ok) {
-                const errorData = await response.json();
-                throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+                const errorData = await response.json()
+                throw new Error(errorData.error || `HTTP error! status: ${response.status}`)
             }
 
-            const updatedAnalysis = await response.json();
-            // setAnalysis(updatedAnalysis); // This state variable is not defined in the original file
-            showToast('success', 'Analysis refreshed successfully!');
+            showToast('success', 'Analysis refreshed successfully!')
             
         } catch (error) {
-            const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
-            showToast('error', errorMessage.includes('HTTP error') ? 'Failed to refresh analysis' : 'Network error during refresh');
+            const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred'
+            showToast('error', errorMessage.includes('HTTP error') ? 'Failed to refresh analysis' : 'Network error during refresh')
         }
-    };
-
-    const getLatestAnalysis = async () => {
-        try {
-            const response = await api.getAnalysisStatus(analysisId);
-            
-            if (!response.ok) {
-                const errorData = await response.json();
-                throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
-            }
-
-            const latestAnalysis = await response.json();
-            // setAnalysis(latestAnalysis); // This state variable is not defined in the original file
-            
-        } catch (error) {
-            console.error('Error fetching latest analysis:', error);
-        }
-    };
+    }
 
     if (state === 'success') {
         return (
@@ -138,7 +101,7 @@ const AutoFixButton: React.FC<Props> = ({
         return (
             <div className="space-y-2">
                 <button
-                    onClick={handleClick}
+                    onClick={handleAutoFix}
                     disabled={false}
                     className="inline-flex items-center gap-2 px-3 py-1 text-sm font-medium text-red-700 bg-red-100 rounded-full hover:bg-red-200"
                 >
@@ -150,7 +113,7 @@ const AutoFixButton: React.FC<Props> = ({
                         {result}
                     </div>
                 )}
-                {showRefreshSuggestion && (
+                {onRefreshSuggestion && (
                     <div className="mt-2 p-2 bg-yellow-50 border border-yellow-200 rounded text-xs">
                         <p className="text-yellow-800 mb-1">
                             💡 File may have changed since analysis. Try refreshing.
@@ -168,7 +131,7 @@ const AutoFixButton: React.FC<Props> = ({
 
     return (
         <button
-            onClick={handleClick}
+            onClick={handleAutoFix}
             disabled={state === 'loading'}
             className="inline-flex items-center gap-2 px-3 py-1 text-sm font-medium text-white bg-green-600 rounded-full hover:bg-green-700 disabled:opacity-50"
         >
@@ -187,8 +150,10 @@ const RefreshAnalysisButton: React.FC<{
     const [refreshing, setRefreshing] = useState(false);
 
     const showToast = (type: 'success' | 'error', message: string) => {
-        if (typeof window !== 'undefined' && hasToast(window)) {
-            window.toast[type](message);
+        if (type === 'success') {
+            alert(`✅ ${message}`)
+        } else {
+            alert(`❌ ${message}`)
         }
     };
 
@@ -237,8 +202,10 @@ const pollForRefreshCompletion = async (analysisId: string) => {
     let attempts = 0;
 
     const showToast = (type: 'success' | 'error', message: string) => {
-        if (typeof window !== 'undefined' && hasToast(window)) {
-            window.toast[type](message);
+        if (type === 'success') {
+            alert(`✅ ${message}`)
+        } else {
+            alert(`❌ ${message}`)
         }
     };
 

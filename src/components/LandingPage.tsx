@@ -18,8 +18,6 @@ const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted }) => {
   const { scrollYProgress } = useScroll()
   const y = useTransform(scrollYProgress, [0, 1], ["0%", "15%"])
   const opacity = useTransform(scrollYProgress, [0, 0.5], [1, 0])
-  const [backendStatus, setBackendStatus] = useState<"healthy" | "unhealthy" | null>(null)
-  const [backendError, setBackendError] = useState<string | null>(null)
 
   useEffect(() => {
     setIsVisible(true)
@@ -28,15 +26,12 @@ const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted }) => {
       try {
         const response = await api.healthCheck()
         if (response.ok) {
-          setBackendStatus("healthy")
-          setBackendError(null)
+          console.log('Backend is healthy')
         } else {
-          setBackendStatus("unhealthy")
-          setBackendError(`HTTP ${response.status}`)
+          console.warn(`Backend health check failed: HTTP ${response.status}`)
         }
       } catch (error) {
-        setBackendStatus("unhealthy")
-        setBackendError(error instanceof Error ? error.message : "Connection failed")
+        console.error('Backend health check error:', error)
       }
     }
 
