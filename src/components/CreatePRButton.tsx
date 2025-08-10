@@ -1,7 +1,6 @@
 // src/components/CreatePRButton.tsx
 
 import React, { useState } from 'react';
-import { api } from "../lib/api"
 
 interface Props {
     githubToken: string;
@@ -11,64 +10,62 @@ interface Props {
         issueIdentifier: string;
         filePath?: string;
         originalCode?: string;
-        repositoryUrl?: string;
-        issues?: any[];
     };
 }
 
 const CreatePRButton: React.FC<Props> = ({ githubToken, prBody }) => {
     const [state, setState] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
-    const [error, setError] = useState<string | null>(null);
-    const [prUrl, setPrUrl] = useState<string | null>(null);
+    const [result, setResult] = useState<string | null>(null);
 
-    // Simple toast function - you can replace this with your actual toast system
-    const showToast = (type: 'success' | 'error', message: string) => {
-        if (type === 'success') {
-            alert(`✅ ${message}`);
-        } else {
-            alert(`❌ ${message}`);
-        }
-    };
-
-    const handleCreatePR = async () => {
-        if (!prBody.analysisId || !githubToken) {
-            showToast('error', 'GitHub token required to create PR')
-            return
+    const handleClick = async () => {
+        if (!githubToken) {
+            if (typeof window !== 'undefined' && (window as any).toast) {
+                (window as any).toast.error('A GitHub token is required to create a Pull Request. Please provide one on the main analysis page.');
+            } else {
+                alert('A GitHub token is required to create a Pull Request. Please provide one on the main analysis page.');
+            }
+            return;
         }
 
-        setState('loading')
-        setError(null)
+        setState('loading');
+        setResult(null);
 
         try {
-            const res = await api.createPR({
-                analysis_id: prBody.analysisId,
-                repository_url: prBody.repositoryUrl || '',
-                github_token: githubToken,
-                issues: prBody.issues || []
-            })
-
-            if (!res.ok) {
-                const errorData = await res.json()
-                throw new Error(errorData.error || `HTTP error! status: ${res.status}`)
-            }
-
-            const result = await res.json()
-            setPrUrl(result.prUrl || result.url || '')
-            setState('success')
-            showToast('success', 'Pull Request created successfully!')
+            const res = await fetch('https://codereview-backend-pau3.onrender.com/api/pr/create', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ ...prBody, githubToken }),
+            });
+            const data = await res.json();
             
-        } catch (error) {
-            const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred'
-            showToast('error', errorMessage.includes('HTTP error') ? 'Failed to create PR' : 'Network error during PR creation')
-            setError(errorMessage)
-            setState('error')
+            if (res.ok && data.prUrl) {
+                setState('success');
+                setResult(data.prUrl);
+                if (typeof window !== 'undefined' && (window as any).toast) {
+                    (window as any).toast.success('✅ Pull Request created successfully!');
+                }
+            } else {
+                setState('error');
+                const errorMessage = data.message || 'An unknown error occurred.';
+                setResult(errorMessage);
+                if (typeof window !== 'undefined' && (window as any).toast) {
+                    (window as any).toast.error(errorMessage);
+                }
+            }
+        } catch (err: any) {
+            setState('error');
+            const errorMessage = err.message || 'Network error during PR creation';
+            setResult(errorMessage);
+            if (typeof window !== 'undefined' && (window as any).toast) {
+                (window as any).toast.error('Network error during PR creation');
+            }
         }
-    }
+    };
 
     if (state === 'success') {
         return (
             <a 
-                href={prUrl || '#'} 
+                href={result!} 
                 target="_blank" 
                 rel="noopener noreferrer" 
                 className="inline-flex items-center gap-2 px-3 py-1 text-sm font-medium text-green-700 bg-green-100 rounded-full hover:bg-green-200"
@@ -82,15 +79,15 @@ const CreatePRButton: React.FC<Props> = ({ githubToken, prBody }) => {
         return (
             <div className="space-y-2">
                 <button
-                    onClick={handleCreatePR}
+                    onClick={handleClick}
                     className="inline-flex items-center gap-2 px-3 py-1 text-sm font-medium text-red-700 bg-red-100 rounded-full hover:bg-red-200"
                 >
                     ❌
                     <span>Create PR Failed - Retry</span>
                 </button>
-                {error && (
+                {result && (
                     <div className="text-xs text-red-600 max-w-xs">
-                        {error}
+                        {result}
                     </div>
                 )}
             </div>
@@ -99,7 +96,7 @@ const CreatePRButton: React.FC<Props> = ({ githubToken, prBody }) => {
 
     return (
         <button
-            onClick={handleCreatePR}
+            onClick={handleClick}
             disabled={state === 'loading'}
             className="inline-flex items-center gap-2 px-3 py-1 text-sm font-medium text-white bg-blue-600 rounded-full hover:bg-blue-700 disabled:opacity-50"
         >

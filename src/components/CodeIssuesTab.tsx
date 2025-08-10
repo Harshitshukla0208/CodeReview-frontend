@@ -69,6 +69,8 @@ const IssueRow: React.FC<{
                                 owner={owner}
                                 repo={repo}
                                 filePath={filePath}
+                                originalCode={issue.suggestion.originalCode}
+                                fixedCode={issue.suggestion.fixedCode}
                                 analysisId={analysisId}
                                 onRefreshSuggestion={handleRefreshSuggestion}
                             />

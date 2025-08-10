@@ -6,8 +6,6 @@ import { motion, useScroll, useTransform, AnimatePresence } from "framer-motion"
 import { FaCode, FaShieldAlt, FaRocket, FaGithub, FaArrowRight, FaPlay, FaHeart, FaLinkedin } from "react-icons/fa"
 import Human1 from '../assets/human-1.svg'
 import Human2 from '../assets/human-2.svg'
-import { api } from "../lib/api"
-
 interface LandingPageProps {
   onGetStarted: () => void
 }
@@ -22,20 +20,19 @@ const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted }) => {
   useEffect(() => {
     setIsVisible(true)
 
-    const checkBackendHealth = async () => {
+    // Wake up backend on page load
+    const wakeUpBackend = async () => {
       try {
-        const response = await api.healthCheck()
-        if (response.ok) {
-          console.log('Backend is healthy')
-        } else {
-          console.warn(`Backend health check failed: HTTP ${response.status}`)
-        }
+        await fetch("https://codereview-backend-pau3.onrender.com/health", {
+          method: "GET",
+          signal: AbortSignal.timeout(5000),
+        })
       } catch (error) {
-        console.error('Backend health check error:', error)
+        console.log("Backend wake-up call made")
       }
     }
 
-    checkBackendHealth()
+    wakeUpBackend()
   }, [])
 
   const openVideo = () => setIsVideoOpen(true)

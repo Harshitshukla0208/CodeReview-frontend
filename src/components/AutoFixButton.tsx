@@ -1,92 +1,111 @@
 // src/components/AutoFixButton.tsx
 
 import React, { useState } from 'react';
-import { api } from "../lib/api"
 
 interface Props {
-    analysisId: string
-    githubToken: string
-    owner: string
-    repo: string
-    filePath: string
-    onRefreshSuggestion?: () => void
+    githubToken: string;
+    owner: string;
+    repo: string;
+    filePath: string;
+    originalCode: string;
+    fixedCode: string;
+    analysisId: string;
+    onRefreshSuggestion?: () => void;
 }
 
+// Type for toast notifications
+interface Toast {
+    success: (message: string) => void;
+    error: (message: string) => void;
+}
+
+// Type guard for toast
+const hasToast = (window: Window): window is Window & { toast: Toast } => {
+    return 'toast' in window && typeof (window as any).toast === 'object';
+};
+
 const AutoFixButton: React.FC<Props> = ({ 
-    analysisId, 
     githubToken, 
     owner, 
     repo, 
     filePath, 
+    originalCode, 
+    fixedCode, 
+    analysisId,
     onRefreshSuggestion 
 }) => {
     const [state, setState] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
     const [result, setResult] = useState<string | null>(null);
+    const [showRefreshSuggestion, setShowRefreshSuggestion] = useState(false);
 
-    // Simple toast function
     const showToast = (type: 'success' | 'error', message: string) => {
-        if (type === 'success') {
-            alert(`✅ ${message}`);
-        } else {
-            alert(`❌ ${message}`);
+        if (typeof window !== 'undefined' && hasToast(window)) {
+            window.toast[type](message);
         }
     };
 
-    const handleAutoFix = async () => {
+    const handleClick = async () => {
         if (!githubToken) {
-            showToast('error', 'GitHub token required for auto-fix')
-            return
+            alert('A GitHub token is required to auto-fix. Please provide one on the main analysis page.');
+            return;
+        }
+        
+        if (!window.confirm('Are you sure you want to auto-fix this issue? This will commit directly to the default branch if you have write access!')) {
+            return;
         }
 
-        setState('loading')
-        setResult(null)
+        setState('loading');
+        setResult(null);
+        setShowRefreshSuggestion(false);
 
         try {
-            const res = await api.autoFixPR({
-                analysis_id: analysisId,
-                repository_url: `https://github.com/${owner}/${repo}.git`,
-                github_token: githubToken,
-                issues: [] // The originalCode and fixedCode are not directly passed here as per the new_code, but the API expects issues.
-            })
+            const res = await fetch('https://codereview-backend-pau3.onrender.com/api/pr/fix/auto', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ 
+                    githubToken, 
+                    owner, 
+                    repo, 
+                    filePath, 
+                    originalCode, 
+                    fixedCode 
+                }),
+            });
 
             if (!res.ok) {
-                const errorData = await res.json()
-                throw new Error(errorData.error || `HTTP error! status: ${res.status}`)
+                throw new Error(`HTTP error! status: ${res.status}`);
             }
 
-            const result = await res.json()
-            setState('success')
-            const successMessage = `✅ Fix applied successfully! (${result.strategy || 'Direct commit'})`
-            setResult(successMessage)
-            showToast('success', successMessage)
+            const data = await res.json();
             
-            // Refresh the analysis to get updated data
-            await refreshAnalysis()
-
+            if (data.success) {
+                setState('success');
+                const successMessage = `✅ Fix applied successfully! (${data.strategy || 'Direct commit'})`;
+                setResult(successMessage);
+                showToast('success', successMessage);
+            } else {
+                setState('error');
+                const errorMessage = data.message || 'An unknown error occurred.';
+                setResult(errorMessage);
+                
+                // Enhanced error handling
+                if (errorMessage.includes("Couldn't apply the fix")) {
+                    setShowRefreshSuggestion(true);
+                    if (onRefreshSuggestion) {
+                        onRefreshSuggestion();
+                    }
+                    showToast('error', 'File has changed since analysis. Try refreshing the analysis.');
+                } else {
+                    showToast('error', errorMessage);
+                }
+            }
         } catch (err) {
-            setState('error')
-            const errorMessage = err instanceof Error ? err.message : 'Unknown error occurred'
-            setResult(errorMessage)
-            showToast('error', errorMessage)
+            setState('error');
+            const errorMessage = err instanceof Error ? err.message : 'Network error during auto-fix';
+            setResult(errorMessage);
+            showToast('error', 'Network error during auto-fix');
         }
-    }
-
-    const refreshAnalysis = async () => {
-        try {
-            const response = await api.refreshAnalysis(analysisId)
-            
-            if (!response.ok) {
-                const errorData = await response.json()
-                throw new Error(errorData.error || `HTTP error! status: ${response.status}`)
-            }
-
-            showToast('success', 'Analysis refreshed successfully!')
-            
-        } catch (error) {
-            const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred'
-            showToast('error', errorMessage.includes('HTTP error') ? 'Failed to refresh analysis' : 'Network error during refresh')
-        }
-    }
+    };
 
     if (state === 'success') {
         return (
@@ -101,7 +120,7 @@ const AutoFixButton: React.FC<Props> = ({
         return (
             <div className="space-y-2">
                 <button
-                    onClick={handleAutoFix}
+                    onClick={handleClick}
                     disabled={false}
                     className="inline-flex items-center gap-2 px-3 py-1 text-sm font-medium text-red-700 bg-red-100 rounded-full hover:bg-red-200"
                 >
@@ -113,7 +132,7 @@ const AutoFixButton: React.FC<Props> = ({
                         {result}
                     </div>
                 )}
-                {onRefreshSuggestion && (
+                {showRefreshSuggestion && (
                     <div className="mt-2 p-2 bg-yellow-50 border border-yellow-200 rounded text-xs">
                         <p className="text-yellow-800 mb-1">
                             💡 File may have changed since analysis. Try refreshing.
@@ -131,7 +150,7 @@ const AutoFixButton: React.FC<Props> = ({
 
     return (
         <button
-            onClick={handleAutoFix}
+            onClick={handleClick}
             disabled={state === 'loading'}
             className="inline-flex items-center gap-2 px-3 py-1 text-sm font-medium text-white bg-green-600 rounded-full hover:bg-green-700 disabled:opacity-50"
         >
@@ -150,10 +169,8 @@ const RefreshAnalysisButton: React.FC<{
     const [refreshing, setRefreshing] = useState(false);
 
     const showToast = (type: 'success' | 'error', message: string) => {
-        if (type === 'success') {
-            alert(`✅ ${message}`)
-        } else {
-            alert(`❌ ${message}`)
+        if (typeof window !== 'undefined' && hasToast(window)) {
+            window.toast[type](message);
         }
     };
 
@@ -161,7 +178,7 @@ const RefreshAnalysisButton: React.FC<{
         try {
             setRefreshing(true);
             
-            const response = await fetch(`/api/analyze/${analysisId}/refresh`, {
+            const response = await fetch(`https://codereview-backend-pau3.onrender.com/api/analyze/${analysisId}/refresh`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -202,16 +219,14 @@ const pollForRefreshCompletion = async (analysisId: string) => {
     let attempts = 0;
 
     const showToast = (type: 'success' | 'error', message: string) => {
-        if (type === 'success') {
-            alert(`✅ ${message}`)
-        } else {
-            alert(`❌ ${message}`)
+        if (typeof window !== 'undefined' && hasToast(window)) {
+            window.toast[type](message);
         }
     };
 
     const poll = async (): Promise<void> => {
         try {
-            const response = await fetch(`/api/analyze/${analysisId}`);
+            const response = await fetch(`https://codereview-backend-pau3.onrender.com/api/analyze/${analysisId}`);
             
             if (!response.ok) {
                 throw new Error(`HTTP error! status: ${response.status}`);

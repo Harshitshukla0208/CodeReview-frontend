@@ -1,12 +1,12 @@
 "use client"
 
 import type React from "react"
-import { useEffect, useState } from "react"
+import { useEffect, useState, useCallback } from "react"
 import { motion } from "framer-motion"
 import { FaSpinner, FaExclamationTriangle, FaRocket, FaArrowLeft } from "react-icons/fa"
+import type { AnalysisResponse } from "../types"
 import Dashboard from "./Dashboard"
 import { useGitHubToken } from "../hooks/useGitHubToken"
-import { api } from "../lib/api"
 
 interface Props {
   analysisId: string
@@ -14,67 +14,72 @@ interface Props {
   onBack: () => void
 }
 
-interface AnalysisResponse {
-  id: string
-  status: string
-  progress: number
-  error?: string
-  issues?: any[]
-  overview?: any
-  repository_url: string
-  results?: any
-}
-
 const POLL_INTERVAL = 2000
+const MAX_POLL_ATTEMPTS = 150 // 5 minutes max
 
 const AnalysisPoller: React.FC<Props> = ({ analysisId, repositoryUrl, onBack }) => {
   const [analysis, setAnalysis] = useState<AnalysisResponse | null>(null)
+  const [pollAttempts, setPollAttempts] = useState(0)
   const [isPolling, setIsPolling] = useState(true)
   const { token: githubToken } = useGitHubToken()
 
-  const pollAnalysis = async () => {
+  const pollAnalysis = useCallback(async () => {
+    if (!isPolling || pollAttempts >= MAX_POLL_ATTEMPTS) {
+      setIsPolling(false)
+      return
+    }
+
     try {
-      const apiResponse = await api.getAnalysisStatus(analysisId)
-      
+      const apiResponse = await fetch(`https://codereview-backend-pau3.onrender.com/api/analyze/${analysisId}`)
+
       if (apiResponse.ok) {
         const apiData = await apiResponse.json()
         setAnalysis(apiData)
 
+        // Stop polling if completed or failed
         if (apiData.status === "completed" || apiData.status === "failed") {
           setIsPolling(false)
         }
       } else {
         console.warn(`API returned ${apiResponse.status}: ${apiResponse.statusText}`)
+        setPollAttempts((prev) => prev + 1)
       }
     } catch (error) {
-      console.error("Error polling analysis:", error)
+      console.error("Polling error:", error)
+      setPollAttempts((prev) => prev + 1)
     }
-  }
+  }, [analysisId, isPolling, pollAttempts])
 
   useEffect(() => {
-    if (isPolling) {
-      const interval = setInterval(pollAnalysis, POLL_INTERVAL)
-      return () => clearInterval(interval)
-    }
-  }, [isPolling])
+    let intervalId: NodeJS.Timeout
 
-  // Handle timeout
+    if (isPolling) {
+      // Initial poll
+      pollAnalysis()
+
+      // Set up interval
+      intervalId = setInterval(pollAnalysis, POLL_INTERVAL)
+    }
+
+    return () => {
+      if (intervalId) {
+        clearInterval(intervalId)
+      }
+    }
+  }, [pollAnalysis, isPolling])
+
+  // Handle max attempts reached
   useEffect(() => {
-    if (isPolling) {
-      const timeout = setTimeout(() => {
-        setAnalysis({
-          id: analysisId,
-          status: "failed",
-          progress: 0,
-          error: "Analysis timed out after 5 minutes",
-          repository_url: repositoryUrl
-        })
-        setIsPolling(false)
-      }, 300000) // 5 minutes
-
-      return () => clearTimeout(timeout)
+    if (pollAttempts >= MAX_POLL_ATTEMPTS && isPolling) {
+      setAnalysis({
+        id: analysisId,
+        status: "failed",
+        progress: 100,
+        error: "Analysis timed out after 5 minutes",
+      })
+      setIsPolling(false)
     }
-  }, [isPolling, analysisId, repositoryUrl])
+  }, [pollAttempts, isPolling, analysisId])
 
   const getRepositoryName = (url: string) => {
     try {
