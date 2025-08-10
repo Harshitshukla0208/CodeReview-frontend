@@ -1,5 +1,5 @@
 // API Configuration
-const API_BASE_URL = 'https://codereview-backend-pau3.onrender.com'
+const API_BASE_URL = 'https://codereview-backend-pau3.onrender.com/api'
 
 // API endpoints
 export const API_ENDPOINTS = {
