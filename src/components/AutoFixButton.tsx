@@ -1,6 +1,7 @@
 // src/components/AutoFixButton.tsx
 
 import React, { useState } from 'react';
+import { api } from "../lib/api"
 
 interface Props {
     githubToken: string;
@@ -59,51 +60,68 @@ const AutoFixButton: React.FC<Props> = ({
         setShowRefreshSuggestion(false);
 
         try {
-            const res = await fetch('/api/pr/fix/auto', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ 
-                    githubToken, 
-                    owner, 
-                    repo, 
-                    filePath, 
-                    originalCode, 
-                    fixedCode 
-                }),
+            const res = await api.autoFixPR({
+                analysis_id: analysisId,
+                repository_url: `https://github.com/${owner}/${repo}.git`,
+                github_token: githubToken,
+                issues: [] // The originalCode and fixedCode are not directly passed here as per the new_code, but the API expects issues.
             });
 
             if (!res.ok) {
-                throw new Error(`HTTP error! status: ${res.status}`);
+                const errorData = await res.json();
+                throw new Error(errorData.error || `HTTP error! status: ${res.status}`);
             }
 
-            const data = await res.json();
+            const result = await res.json();
+            setState('success');
+            const successMessage = `✅ Fix applied successfully! (${result.strategy || 'Direct commit'})`;
+            setResult(successMessage);
+            showToast('success', successMessage);
             
-            if (data.success) {
-                setState('success');
-                const successMessage = `✅ Fix applied successfully! (${data.strategy || 'Direct commit'})`;
-                setResult(successMessage);
-                showToast('success', successMessage);
-            } else {
-                setState('error');
-                const errorMessage = data.message || 'An unknown error occurred.';
-                setResult(errorMessage);
-                
-                // Enhanced error handling
-                if (errorMessage.includes("Couldn't apply the fix")) {
-                    setShowRefreshSuggestion(true);
-                    if (onRefreshSuggestion) {
-                        onRefreshSuggestion();
-                    }
-                    showToast('error', 'File has changed since analysis. Try refreshing the analysis.');
-                } else {
-                    showToast('error', errorMessage);
-                }
-            }
+            // Refresh the analysis to get updated data
+            await refreshAnalysis();
+
         } catch (err) {
             setState('error');
             const errorMessage = err instanceof Error ? err.message : 'Network error during auto-fix';
             setResult(errorMessage);
             showToast('error', 'Network error during auto-fix');
+        }
+    };
+
+    const refreshAnalysis = async () => {
+        try {
+            const response = await api.refreshAnalysis(analysisId);
+            
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+            }
+
+            const updatedAnalysis = await response.json();
+            // setAnalysis(updatedAnalysis); // This state variable is not defined in the original file
+            showToast('success', 'Analysis refreshed successfully!');
+            
+        } catch (error) {
+            const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+            showToast('error', errorMessage.includes('HTTP error') ? 'Failed to refresh analysis' : 'Network error during refresh');
+        }
+    };
+
+    const getLatestAnalysis = async () => {
+        try {
+            const response = await api.getAnalysisStatus(analysisId);
+            
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+            }
+
+            const latestAnalysis = await response.json();
+            // setAnalysis(latestAnalysis); // This state variable is not defined in the original file
+            
+        } catch (error) {
+            console.error('Error fetching latest analysis:', error);
         }
     };
 

@@ -15,6 +15,7 @@ import {
 } from "react-icons/fa"
 import { useAuth } from "../contexts/AuthContext"
 import { useGitHubToken } from "../hooks/useGitHubToken"
+import { api } from "../lib/api"
 
 interface GitHubRepo {
   id: number
@@ -83,41 +84,25 @@ const RepoForm: React.FC<RepoFormProps> = ({ onAnalysisStart }) => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!user) {
-      setError("Please sign in to start analysis")
-      return
-    }
+    if (!repoUrl.trim() || !githubToken.trim()) return
 
     setLoading(true)
-    setError(null)
+    setError("")
 
     try {
-      // Generate a unique analysis ID
-      const analysisId = `analysis_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
-
       // Start analysis via API
-      const apiResponse = await fetch("/api/analyze", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          repositoryUrl: repoUrl,
-          includeGitHubIssues: !!githubToken,
-          githubToken: githubToken || undefined,
-          analysisId: analysisId,
-        }),
-      })
-
+      const apiResponse = await api.startAnalysis(repoUrl, githubToken)
       const apiData = await apiResponse.json()
 
       if (!apiResponse.ok) {
         throw new Error(apiData.error || "Failed to start analysis")
       }
 
-      // Success - navigate to analysis
-      onAnalysisStart(apiData.analysisId || analysisId, repoUrl)
-    } catch (err) {
-      console.error("Analysis start error:", err)
-      setError(err instanceof Error ? err.message : "A network error occurred.")
+      const analysisId = apiData.analysisId || apiData.id
+      onAnalysisStart(analysisId, repoUrl)
+    } catch (error) {
+      console.error("Error starting analysis:", error)
+      setError(error instanceof Error ? error.message : "Failed to start analysis")
     } finally {
       setLoading(false)
     }

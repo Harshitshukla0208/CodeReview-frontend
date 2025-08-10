@@ -7,6 +7,7 @@ import { FaSpinner, FaExclamationTriangle, FaRocket, FaArrowLeft } from "react-i
 import type { AnalysisResponse } from "../types"
 import Dashboard from "./Dashboard"
 import { useGitHubToken } from "../hooks/useGitHubToken"
+import { api } from "../lib/api"
 
 interface Props {
   analysisId: string
@@ -23,32 +24,24 @@ const AnalysisPoller: React.FC<Props> = ({ analysisId, repositoryUrl, onBack }) 
   const [isPolling, setIsPolling] = useState(true)
   const { token: githubToken } = useGitHubToken()
 
-  const pollAnalysis = useCallback(async () => {
-    if (!isPolling || pollAttempts >= MAX_POLL_ATTEMPTS) {
-      setIsPolling(false)
-      return
-    }
-
+  const pollAnalysis = async () => {
     try {
-      const apiResponse = await fetch(`/api/analyze/${analysisId}`)
-
+      const apiResponse = await api.getAnalysisStatus(analysisId)
+      
       if (apiResponse.ok) {
         const apiData = await apiResponse.json()
         setAnalysis(apiData)
 
-        // Stop polling if completed or failed
         if (apiData.status === "completed" || apiData.status === "failed") {
           setIsPolling(false)
         }
       } else {
         console.warn(`API returned ${apiResponse.status}: ${apiResponse.statusText}`)
-        setPollAttempts((prev) => prev + 1)
       }
     } catch (error) {
-      console.error("Polling error:", error)
-      setPollAttempts((prev) => prev + 1)
+      console.error("Error polling analysis:", error)
     }
-  }, [analysisId, isPolling, pollAttempts])
+  }
 
   useEffect(() => {
     let intervalId: NodeJS.Timeout

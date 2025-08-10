@@ -4,11 +4,15 @@ import { useNavigate } from 'react-router-dom'
 
 const AuthCallback: React.FC = () => {
   const [error, setError] = useState<string | null>(null)
+  const [status, setStatus] = useState<string>('Processing authentication...')
   const navigate = useNavigate()
 
   useEffect(() => {
     const handleAuthCallback = async () => {
       try {
+        setStatus('Checking current session...')
+        console.log('Auth callback started, URL:', window.location.href)
+        
         // Handle the OAuth callback by processing the URL
         const { data, error } = await supabase.auth.getSession()
         
@@ -21,14 +25,23 @@ const AuthCallback: React.FC = () => {
         if (data.session) {
           // Successfully authenticated, redirect to main app
           console.log('Authentication successful, redirecting...')
+          setStatus('Authentication successful! Redirecting...')
           navigate('/', { replace: true })
         } else {
-          // Try to get the session from the URL hash
+          setStatus('No active session, checking URL parameters...')
+          
+          // Try to get the session from the URL hash or query params
           const hashParams = new URLSearchParams(window.location.hash.substring(1))
-          const accessToken = hashParams.get('access_token')
-          const refreshToken = hashParams.get('refresh_token')
+          const queryParams = new URLSearchParams(window.location.search)
+          
+          const accessToken = hashParams.get('access_token') || queryParams.get('access_token')
+          const refreshToken = hashParams.get('refresh_token') || queryParams.get('refresh_token')
+          const code = queryParams.get('code')
+          
+          console.log('URL params found:', { accessToken: !!accessToken, refreshToken: !!refreshToken, code: !!code })
           
           if (accessToken && refreshToken) {
+            setStatus('Setting session with tokens...')
             // Set the session manually
             const { error: setSessionError } = await supabase.auth.setSession({
               access_token: accessToken,
@@ -40,10 +53,24 @@ const AuthCallback: React.FC = () => {
               setError(setSessionError.message)
             } else {
               console.log('Session set successfully, redirecting...')
+              setStatus('Session set successfully! Redirecting...')
+              navigate('/', { replace: true })
+            }
+          } else if (code) {
+            setStatus('Processing authorization code...')
+            // Handle authorization code flow
+            const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code)
+            
+            if (exchangeError) {
+              console.error('Error exchanging code for session:', exchangeError)
+              setError(exchangeError.message)
+            } else {
+              console.log('Code exchanged successfully, redirecting...')
+              setStatus('Code exchanged successfully! Redirecting...')
               navigate('/', { replace: true })
             }
           } else {
-            setError('No session found and no tokens in URL')
+            setError('No session found and no authentication tokens in URL')
           }
         }
       } catch (err) {
@@ -82,7 +109,7 @@ const AuthCallback: React.FC = () => {
       <div className="bg-white shadow-lg rounded-lg p-8 max-w-md w-full text-center">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto mb-4"></div>
         <h2 className="text-xl font-semibold text-gray-900 mb-2">Completing Authentication</h2>
-        <p className="text-gray-600">Please wait while we complete your sign-in...</p>
+        <p className="text-gray-600">{status}</p>
       </div>
     </div>
   )

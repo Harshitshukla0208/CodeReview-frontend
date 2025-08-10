@@ -6,6 +6,8 @@ import { motion, useScroll, useTransform, AnimatePresence } from "framer-motion"
 import { FaCode, FaShieldAlt, FaRocket, FaGithub, FaArrowRight, FaPlay, FaHeart, FaLinkedin } from "react-icons/fa"
 import Human1 from '../assets/human-1.svg'
 import Human2 from '../assets/human-2.svg'
+import { api } from "../lib/api"
+
 interface LandingPageProps {
   onGetStarted: () => void
 }
@@ -16,23 +18,29 @@ const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted }) => {
   const { scrollYProgress } = useScroll()
   const y = useTransform(scrollYProgress, [0, 1], ["0%", "15%"])
   const opacity = useTransform(scrollYProgress, [0, 0.5], [1, 0])
+  const [backendStatus, setBackendStatus] = useState<"healthy" | "unhealthy" | null>(null)
+  const [backendError, setBackendError] = useState<string | null>(null)
 
   useEffect(() => {
     setIsVisible(true)
 
-    // Wake up backend on page load
-    const wakeUpBackend = async () => {
+    const checkBackendHealth = async () => {
       try {
-        await fetch("/health-proxy", {
-          method: "GET",
-          signal: AbortSignal.timeout(5000),
-        })
+        const response = await api.healthCheck()
+        if (response.ok) {
+          setBackendStatus("healthy")
+          setBackendError(null)
+        } else {
+          setBackendStatus("unhealthy")
+          setBackendError(`HTTP ${response.status}`)
+        }
       } catch (error) {
-        console.log("Backend wake-up call made")
+        setBackendStatus("unhealthy")
+        setBackendError(error instanceof Error ? error.message : "Connection failed")
       }
     }
 
-    wakeUpBackend()
+    checkBackendHealth()
   }, [])
 
   const openVideo = () => setIsVideoOpen(true)
