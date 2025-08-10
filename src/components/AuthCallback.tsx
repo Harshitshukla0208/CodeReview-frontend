@@ -9,22 +9,46 @@ const AuthCallback: React.FC = () => {
   useEffect(() => {
     const handleAuthCallback = async () => {
       try {
+        // Handle the OAuth callback by processing the URL
         const { data, error } = await supabase.auth.getSession()
         
         if (error) {
+          console.error('Auth callback error:', error)
           setError(error.message)
           return
         }
 
         if (data.session) {
           // Successfully authenticated, redirect to main app
+          console.log('Authentication successful, redirecting...')
           navigate('/', { replace: true })
         } else {
-          setError('No session found')
+          // Try to get the session from the URL hash
+          const hashParams = new URLSearchParams(window.location.hash.substring(1))
+          const accessToken = hashParams.get('access_token')
+          const refreshToken = hashParams.get('refresh_token')
+          
+          if (accessToken && refreshToken) {
+            // Set the session manually
+            const { error: setSessionError } = await supabase.auth.setSession({
+              access_token: accessToken,
+              refresh_token: refreshToken
+            })
+            
+            if (setSessionError) {
+              console.error('Error setting session:', setSessionError)
+              setError(setSessionError.message)
+            } else {
+              console.log('Session set successfully, redirecting...')
+              navigate('/', { replace: true })
+            }
+          } else {
+            setError('No session found and no tokens in URL')
+          }
         }
       } catch (err) {
-        setError('Authentication failed')
         console.error('Auth callback error:', err)
+        setError('Authentication failed')
       }
     }
 
